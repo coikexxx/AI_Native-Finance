@@ -1,6 +1,5 @@
 """Input validation and prompt guardrails."""
 import re
-from typing import Optional
 
 
 VALID_TICKER_PATTERN = re.compile(r"^[A-Z]{1,5}(\.[A-Z]{1,2})?$")
@@ -18,7 +17,7 @@ INJECTION_PATTERNS = [
 ]
 
 
-def validate_ticker(ticker: str) -> tuple[bool, Optional[str]]:
+def validate_ticker(ticker: str) -> tuple[bool, str | None]:
     """Validate ticker format. Returns (is_valid, error_message)."""
     if not ticker:
         return False, "Ticker cannot be empty"

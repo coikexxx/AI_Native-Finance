@@ -1,7 +1,7 @@
 """APScheduler-based alert scheduler."""
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -193,28 +193,32 @@ class AlertScheduler:
                     if earnings_date:
                         if isinstance(earnings_date, (list, tuple)):
                             earnings_date = earnings_date[0]
+                        # Normalize to plain date — handles both timezone-aware Timestamps and datetime
                         if hasattr(earnings_date, 'date'):
                             earnings_date = earnings_date.date()
-                        days_until = (earnings_date - datetime.utcnow().date()).days
-                        if 0 <= days_until <= 7:
-                            msg = f"{alert.ticker} earnings in {days_until} days ({earnings_date})"
-                            trigger = AlertTrigger(
-                                alert_id=alert.id,
-                                triggered_at=datetime.utcnow(),
-                                trigger_value=msg,
-                                action_taken="SSE notification sent",
-                            )
-                            db.add(trigger)
-                            alert.last_triggered_at = datetime.utcnow()
-                            await sse_manager.push_notification({
-                                "event_type": "alert_triggered",
-                                "payload": {
-                                    "alert_id": alert.id,
-                                    "ticker": alert.ticker,
-                                    "message": msg,
-                                    "alert_type": "earnings_date",
-                                },
-                            })
+                        if not isinstance(earnings_date, date):
+                            earnings_date = None
+                        if earnings_date:
+                            days_until = (earnings_date - date.today()).days
+                            if 0 <= days_until <= 7:
+                                msg = f"{alert.ticker} earnings in {days_until} days ({earnings_date})"
+                                trigger = AlertTrigger(
+                                    alert_id=alert.id,
+                                    triggered_at=datetime.utcnow(),
+                                    trigger_value=msg,
+                                    action_taken="SSE notification sent",
+                                )
+                                db.add(trigger)
+                                alert.last_triggered_at = datetime.utcnow()
+                                await sse_manager.push_notification({
+                                    "event_type": "alert_triggered",
+                                    "payload": {
+                                        "alert_id": alert.id,
+                                        "ticker": alert.ticker,
+                                        "message": msg,
+                                        "alert_type": "earnings_date",
+                                    },
+                                })
                 except Exception as e:
                     logger.warning(f"Error checking earnings for {alert.ticker}: {e}")
 

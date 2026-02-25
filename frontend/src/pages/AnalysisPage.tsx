@@ -9,7 +9,7 @@ import { Scorecard } from '../components/research/Scorecard'
 import { InvestmentMemo } from '../components/research/InvestmentMemo'
 import { EvidencePack } from '../components/research/EvidencePack'
 import { AlertForm } from '../components/alerts/AlertForm'
-import type { StreamEvent } from '../types/analysis'
+import type { StreamEvent, Scorecard } from '../types/analysis'
 
 export function AnalysisPage() {
   const { jobId } = useParams<{ jobId: string }>()
@@ -83,7 +83,7 @@ export function AnalysisPage() {
         updateJobResult({
           status: 'complete',
           decision: payload.decision as 'Buy' | 'Hold' | 'Watch' | 'No',
-          scorecard: payload.scorecard as never,
+          scorecard: payload.scorecard as Scorecard,
           decision_rationale: payload.decision_rationale as string,
         })
         // Reload full result

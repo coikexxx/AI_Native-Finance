@@ -72,9 +72,15 @@ export function WatchlistPage() {
               <div key={item.id}
                 className="flex items-center justify-between py-2.5 border-b border-slate-800 last:border-0">
                 <div className="flex items-center gap-3">
-                  <Link to={`/`} className="font-mono font-bold text-sky-400 text-lg hover:text-sky-300">
+                  <button
+                    onClick={() => {
+                      sessionStorage.setItem('prefill_ticker', item.ticker)
+                      window.location.href = '/'
+                    }}
+                    className="font-mono font-bold text-sky-400 text-lg hover:text-sky-300 bg-transparent border-0 p-0 cursor-pointer"
+                  >
                     {item.ticker}
-                  </Link>
+                  </button>
                   {item.current_price && (
                     <span className="text-slate-300">${item.current_price.toFixed(2)}</span>
                   )}

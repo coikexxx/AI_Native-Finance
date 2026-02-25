@@ -43,6 +43,11 @@ class DCFModel:
 
         # Terminal value (Gordon Growth Model)
         terminal_fcf = fcf_projections[-1] * (1 + inputs.terminal_growth_rate)
+        if inputs.wacc <= inputs.terminal_growth_rate:
+            raise ValueError(
+                f"WACC ({inputs.wacc:.1%}) must exceed terminal growth rate "
+                f"({inputs.terminal_growth_rate:.1%}) for DCF to be meaningful"
+            )
         terminal_value = terminal_fcf / (inputs.wacc - inputs.terminal_growth_rate)
 
         # Present value of FCF

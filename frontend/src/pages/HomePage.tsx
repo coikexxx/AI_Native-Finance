@@ -50,9 +50,9 @@ export function HomePage() {
                 </div>
                 {job.scorecard && (
                   <div className="flex gap-3 text-xs text-slate-500">
-                    <span>财务 {job.scorecard.financial_quality_score?.toFixed(1)}</span>
-                    <span>护城河 {job.scorecard.moat_score?.toFixed(1)}</span>
-                    <span>估值 {job.scorecard.valuation_score?.toFixed(1)}</span>
+                    <span>财务 {job.scorecard?.financial_quality_score?.toFixed(1)}</span>
+                    <span>护城河 {job.scorecard?.moat_score?.toFixed(1)}</span>
+                    <span>估值 {job.scorecard?.valuation_score?.toFixed(1)}</span>
                   </div>
                 )}
                 <div className="text-xs text-slate-600 mt-1">

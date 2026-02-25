@@ -23,7 +23,7 @@ export const useAlertStore = create<AlertState>((set, get) => ({
       const alerts = await alertsApi.list()
       set({ alerts, loading: false })
     } catch (e: unknown) {
-      set({ error: (e as Error).message, loading: false })
+      set({ error: e instanceof Error ? e.message : String(e), loading: false })
     }
   },
 

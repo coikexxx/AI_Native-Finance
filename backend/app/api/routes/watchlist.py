@@ -1,4 +1,5 @@
 """Watchlist routes."""
+import asyncio
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,7 +49,7 @@ async def list_watchlist(db: AsyncSession = Depends(get_db)):
         )
         try:
             from app.ingestion.market_data import market_data_fetcher
-            price = market_data_fetcher.fetch_fast_price(item.ticker)
+            price = await asyncio.to_thread(market_data_fetcher.fetch_fast_price, item.ticker)
             resp.current_price = price
         except Exception:
             pass
@@ -89,5 +90,5 @@ async def remove_from_watchlist(ticker: str, db: AsyncSession = Depends(get_db))
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail=f"{ticker} not in watchlist")
-    await db.delete(item)
+    db.delete(item)
     await db.commit()

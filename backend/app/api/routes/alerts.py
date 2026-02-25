@@ -127,7 +127,7 @@ async def delete_alert(alert_id: str, db: AsyncSession = Depends(get_db)):
     alert = result.scalar_one_or_none()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    await db.delete(alert)
+    db.delete(alert)
     await db.commit()
 
 

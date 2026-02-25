@@ -7,7 +7,7 @@ import clsx from 'clsx'
 export function AlertList() {
   const { alerts, load, toggle, remove } = useAlertStore()
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   if (!alerts.length) {
     return (
@@ -60,8 +60,12 @@ export function AlertList() {
                 {/* Delete */}
                 <button
                   onClick={async () => {
-                    await alertsApi.delete(alert.id)
-                    remove(alert.id)
+                    try {
+                      await alertsApi.delete(alert.id)
+                      remove(alert.id)
+                    } catch {
+                      alert('删除失败 Failed to delete alert. Please try again.')
+                    }
                   }}
                   className="text-slate-600 hover:text-red-400 ml-1 p-0.5 transition-colors"
                   title="删除 Delete"
