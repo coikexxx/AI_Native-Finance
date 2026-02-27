@@ -5,6 +5,7 @@ const navItems = [
   { path: '/', label: '研究 Research', icon: '🔍' },
   { path: '/alerts', label: '提醒 Alerts', icon: '🔔' },
   { path: '/watchlist', label: '自选股 Watchlist', icon: '⭐' },
+  { path: '/monitor', label: '监控 Monitor', icon: '📡' },
 ]
 
 export function AppShell() {
