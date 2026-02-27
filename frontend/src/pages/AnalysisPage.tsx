@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
+import { useShallow } from 'zustand/react/shallow'
 import { useSSE } from '../hooks/useSSE'
 import { useAnalysisStore } from '../store/analysisStore'
 import { analysisApi } from '../api/analysis'
@@ -9,42 +10,23 @@ import { Scorecard } from '../components/research/Scorecard'
 import { InvestmentMemo } from '../components/research/InvestmentMemo'
 import { EvidencePack } from '../components/research/EvidencePack'
 import { AlertForm } from '../components/alerts/AlertForm'
-import type { StreamEvent, Scorecard } from '../types/analysis'
+import type { StreamEvent, Scorecard as ScorecardType } from '../types/analysis'
 
 export function AnalysisPage() {
   const { jobId } = useParams<{ jobId: string }>()
   const [isStreaming, setIsStreaming] = useState(true)
-  const {
-    currentJob, updateJobResult, updateAgentStatus, setPhase, setCurrentJob,
-  } = useAnalysisStore()
 
-  // Load existing analysis if navigating directly to URL
-  useEffect(() => {
-    if (!jobId) return
-    analysisApi.get(jobId).then(job => {
-      setCurrentJob(job)
-      if (job.status === 'complete' || job.status === 'failed') {
-        setIsStreaming(false)
-      }
-    }).catch(() => {})
-  }, [jobId])
-
-  // SSE stream for live updates
-  useSSE(
-    jobId && isStreaming ? `/api/v1/analysis/${jobId}/stream` : '',
-    {
-      enabled: isStreaming && !!jobId,
-      onMessage: (e) => {
-        try {
-          const event: StreamEvent = JSON.parse(e.data)
-          handleStreamEvent(event)
-        } catch {}
-      },
-      onError: () => {},
-    }
+  const currentJob = useAnalysisStore(state => state.currentJob)
+  const { updateJobResult, updateAgentStatus, setPhase, setCurrentJob } = useAnalysisStore(
+    useShallow(state => ({
+      updateJobResult: state.updateJobResult,
+      updateAgentStatus: state.updateAgentStatus,
+      setPhase: state.setPhase,
+      setCurrentJob: state.setCurrentJob,
+    }))
   )
 
-  const handleStreamEvent = (event: StreamEvent) => {
+  const handleStreamEvent = useCallback((event: StreamEvent) => {
     const { event_type, agent_name, payload } = event
 
     switch (event_type) {
@@ -83,10 +65,9 @@ export function AnalysisPage() {
         updateJobResult({
           status: 'complete',
           decision: payload.decision as 'Buy' | 'Hold' | 'Watch' | 'No',
-          scorecard: payload.scorecard as Scorecard,
+          scorecard: payload.scorecard as ScorecardType,
           decision_rationale: payload.decision_rationale as string,
         })
-        // Reload full result
         if (jobId) {
           analysisApi.get(jobId).then(job => setCurrentJob(job)).catch(() => {})
         }
@@ -96,7 +77,33 @@ export function AnalysisPage() {
         updateJobResult({ status: 'failed', error_message: payload.message as string })
         break
     }
-  }
+  }, [jobId, setCurrentJob, setPhase, updateAgentStatus, updateJobResult])
+
+  // Load existing analysis if navigating directly to URL
+  useEffect(() => {
+    if (!jobId) return
+    analysisApi.get(jobId).then(job => {
+      setCurrentJob(job)
+      if (job.status === 'complete' || job.status === 'failed') {
+        setIsStreaming(false)
+      }
+    }).catch(() => {})
+  }, [jobId, setCurrentJob])
+
+  // SSE stream for live updates
+  useSSE(
+    jobId && isStreaming ? `/api/v1/analysis/${jobId}/stream` : '',
+    {
+      enabled: isStreaming && !!jobId,
+      onMessage: (e) => {
+        try {
+          const event: StreamEvent = JSON.parse(e.data)
+          handleStreamEvent(event)
+        } catch {}
+      },
+      onError: () => {},
+    }
+  )
 
   if (!currentJob) {
     return (
@@ -111,7 +118,6 @@ export function AnalysisPage() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-100 font-mono">{currentJob.ticker}</h1>
@@ -135,22 +141,18 @@ export function AnalysisPage() {
         )}
       </div>
 
-      {/* Failed state */}
       {isFailed && (
         <div className="card border border-red-800 bg-red-900/20">
           <p className="text-red-300">分析失败: {currentJob.error_message}</p>
         </div>
       )}
 
-      {/* Running: show agent status board */}
       {(currentJob.status === 'running' || currentJob.status === 'pending') && (
         <AgentStatusBoard />
       )}
 
-      {/* Complete: show full results */}
       {isComplete && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Left column: Decision + Scorecard */}
           <div className="space-y-4">
             {currentJob.decision && (
               <DecisionBadge
@@ -161,11 +163,9 @@ export function AnalysisPage() {
             {currentJob.scorecard && (
               <Scorecard scorecard={currentJob.scorecard} />
             )}
-            {/* Set alert quick-action */}
             <AlertForm defaultTicker={currentJob.ticker} />
           </div>
 
-          {/* Right column: Investment memo + evidence */}
           <div className="lg:col-span-2 space-y-4">
             {currentJob.investment_memo_md && (
               <InvestmentMemo

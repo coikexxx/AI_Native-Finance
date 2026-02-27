@@ -29,12 +29,19 @@ class Settings(BaseSettings):
     # Analysis
     max_concurrent_agents: int = 3
     analysis_timeout_seconds: int = 300
+    ingestion_fetch_timeout_seconds: int = 25
+
+    # SSE
+    sse_queue_size: int = 200
 
     # ChromaDB path
     chroma_path: str = str(BASE_DIR / "data" / "chroma")
 
     # Raw data lake path
     raw_data_path: str = str(BASE_DIR / "data" / "raw")
+
+    # Feature store (separate SQLite file to reduce lock contention)
+    feature_store_path: str = str(BASE_DIR / "data" / "db" / "feature_store.db")
 
     class Config:
         env_file = ".env"
