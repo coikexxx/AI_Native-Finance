@@ -40,6 +40,27 @@ class AlertScheduler:
             replace_existing=True,
         )
 
+        # Watchlist price anomaly check: every 5 minutes on weekdays during market hours
+        self.scheduler.add_job(
+            self._check_watchlist_price_anomalies,
+            trigger=CronTrigger(
+                day_of_week="mon-fri",
+                hour="9-16",
+                minute="*/5",
+                timezone="America/New_York",
+            ),
+            id="watchlist_price_anomaly_checker",
+            replace_existing=True,
+        )
+
+        # Watchlist news check: every 30 minutes (including pre/post-market hours)
+        self.scheduler.add_job(
+            self._check_watchlist_news,
+            trigger=CronTrigger(minute="*/30", timezone="America/New_York"),
+            id="watchlist_news_checker",
+            replace_existing=True,
+        )
+
         self.scheduler.start()
         self._started = True
         logger.info("Alert scheduler started")
@@ -223,6 +244,16 @@ class AlertScheduler:
                     logger.warning(f"Error checking earnings for {alert.ticker}: {e}")
 
             await db.commit()
+
+    async def _check_watchlist_price_anomalies(self) -> None:
+        """Delegate to WatchlistMonitor for price anomaly detection."""
+        from app.alerts.watchlist_monitor import watchlist_monitor
+        await watchlist_monitor.check_price_anomalies()
+
+    async def _check_watchlist_news(self) -> None:
+        """Delegate to WatchlistMonitor for news/sentiment monitoring."""
+        from app.alerts.watchlist_monitor import watchlist_monitor
+        await watchlist_monitor.check_news()
 
     async def _run_reanalysis(self, ticker: str, alert_id: str) -> None:
         """Trigger a re-analysis for a scheduled alert."""
