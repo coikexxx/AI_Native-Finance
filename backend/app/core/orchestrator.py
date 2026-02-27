@@ -8,6 +8,7 @@ Phase 4: Synthesis → Investment Memo
 """
 import asyncio
 import json
+import time
 from datetime import datetime
 from typing import Optional
 import logging
@@ -201,16 +202,38 @@ class AgentOrchestrator:
                 return {}, ""
 
         async def fetch_fin():
+            timeout = settings.ingestion_fetch_timeout_seconds
+
+            async def timed_fetch(label: str, fn):
+                start = time.perf_counter()
+                try:
+                    result = await asyncio.wait_for(asyncio.to_thread(fn, ticker), timeout=timeout)
+                    logger.info("[%s] financials.%s fetched in %.2fs", ticker, label, time.perf_counter() - start)
+                    return result
+                except asyncio.TimeoutError:
+                    logger.warning("[%s] financials.%s timed out after %ss", ticker, label, timeout)
+                    return None
+                except Exception as e:
+                    logger.warning("[%s] financials.%s failed: %s", ticker, label, e)
+                    return None
+
+            income, balance, cashflow = await asyncio.gather(
+                timed_fetch("income", self.financials.fetch_income_statement),
+                timed_fetch("balance", self.financials.fetch_balance_sheet),
+                timed_fetch("cashflow", self.financials.fetch_cash_flow),
+            )
+
             try:
-                income = await asyncio.to_thread(self.financials.fetch_income_statement, ticker)
-                balance = await asyncio.to_thread(self.financials.fetch_balance_sheet, ticker)
-                cashflow = await asyncio.to_thread(self.financials.fetch_cash_flow, ticker)
-                text = await asyncio.to_thread(self.financials.to_text_summary, ticker)
+                text = await asyncio.wait_for(
+                    asyncio.to_thread(self.financials.to_text_summary, ticker),
+                    timeout=timeout,
+                )
                 self.object_store.save(ticker, "financials_text", text)
-                return income, balance, cashflow, text
             except Exception as e:
-                logger.warning(f"financials failed: {e}")
-                return None, None, None, ""
+                logger.warning("[%s] financials.text failed: %s", ticker, e)
+                text = ""
+
+            return income, balance, cashflow, text
 
         async def fetch_news():
             try:

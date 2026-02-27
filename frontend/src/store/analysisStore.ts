@@ -38,12 +38,27 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   setCurrentJob: (job) => set({ currentJob: job }),
 
   updateAgentStatus: (name, updates) =>
-    set(state => ({
-      agentStatuses: {
-        ...state.agentStatuses,
-        [name]: { ...state.agentStatuses[name], ...updates },
-      },
-    })),
+    set(state => {
+      const current = state.agentStatuses[name]
+      if (!current) return state
+      const next = { ...current, ...updates }
+
+      if (
+        current.status === next.status &&
+        current.progress_pct === next.progress_pct &&
+        current.message === next.message &&
+        current.display_name === next.display_name
+      ) {
+        return state
+      }
+
+      return {
+        agentStatuses: {
+          ...state.agentStatuses,
+          [name]: next,
+        },
+      }
+    }),
 
   setPhase: (phase) => set({ streamingPhase: phase }),
 

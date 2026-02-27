@@ -9,7 +9,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = settings.database_url.replace("sqlite+aiosqlite:///", "").replace("sqlite:///", "")
+DB_PATH = settings.feature_store_path
 
 
 class FeatureStore:
@@ -21,6 +21,8 @@ class FeatureStore:
     def _init_table(self) -> None:
         try:
             with sqlite3.connect(self.db_path) as conn:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA busy_timeout=5000")
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS financial_features (
                         ticker TEXT NOT NULL,
@@ -36,6 +38,7 @@ class FeatureStore:
     def save_features(self, ticker: str, features: dict) -> None:
         try:
             with sqlite3.connect(self.db_path) as conn:
+                conn.execute("PRAGMA busy_timeout=5000")
                 conn.execute("""
                     INSERT OR REPLACE INTO financial_features (ticker, computed_at, features_json)
                     VALUES (?, ?, ?)
@@ -47,6 +50,7 @@ class FeatureStore:
     def load_features(self, ticker: str, max_age_hours: int = 24) -> Optional[dict]:
         try:
             with sqlite3.connect(self.db_path) as conn:
+                conn.execute("PRAGMA busy_timeout=5000")
                 row = conn.execute(
                     "SELECT features_json, computed_at FROM financial_features WHERE ticker = ?",
                     (ticker.upper(),)
@@ -66,7 +70,6 @@ class FeatureStore:
         features = {}
         try:
             import pandas as pd
-            import numpy as np
 
             # Helper: safe get from DataFrame
             def get_val(df, row_name: str, col_idx: int = 0):
