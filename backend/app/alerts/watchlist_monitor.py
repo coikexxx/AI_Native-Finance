@@ -32,6 +32,14 @@ _HIGH_PRIORITY_KEYWORDS = [
     "ceo", "cfo", "coo", "resign", "appoint", "fired", "layoff", "layoffs",
     # Product / operations
     "patent", "product launch", "recall", "supply chain",
+    # Chinese keywords — A股/港股
+    "盈利", "利润", "营收", "增长", "下滑", "亏损",
+    "证监会", "监管", "处罚", "立案", "调查",
+    "并购", "重组", "分红", "回购", "增发", "配股",
+    "停牌", "复牌", "退市", "上市",
+    "减持", "增持", "解禁",
+    "业绩预告", "业绩快报", "年报", "半年报", "季报",
+    "降息", "加息", "央行", "利好", "利空",
 ]
 
 
@@ -79,6 +87,13 @@ class WatchlistMonitor:
 
             for item in items:
                 try:
+                    from app.ingestion.ticker_resolver import resolve_ticker
+                    try:
+                        ticker_info = resolve_ticker(item.ticker)
+                        currency = ticker_info["currency"]
+                    except Exception:
+                        currency = "$"
+
                     detail = await asyncio.to_thread(
                         market_data_fetcher.fetch_price_detail, item.ticker
                     )
@@ -95,7 +110,7 @@ class WatchlistMonitor:
                         sign = "+" if change_pct > 0 else ""
                         msg = (
                             f"{item.ticker} 价格{direction} {sign}{change_pct:.1f}%，"
-                            f"当前价格 ${price:.2f}"
+                            f"当前价格 {currency}{price:.2f}"
                         )
                         await sse_manager.push_notification({
                             "event_type": "watchlist_price_anomaly",
@@ -118,7 +133,7 @@ class WatchlistMonitor:
                     ):
                         msg = (
                             f"{item.ticker} 成交量异常放大 {volume_ratio:.1f}x 均值，"
-                            f"当前价格 ${price:.2f}"
+                            f"当前价格 {currency}{price:.2f}"
                         )
                         await sse_manager.push_notification({
                             "event_type": "watchlist_price_anomaly",

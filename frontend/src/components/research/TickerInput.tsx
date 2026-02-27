@@ -19,10 +19,10 @@ export function TickerInput() {
           AI 投研助手
         </h1>
         <p className="text-slate-400 text-base">
-          输入股票代码，AI 自动完成行业、财务、估值、风险全面研究
+          A股 / 港股 / BTC 全面投研分析
         </p>
         <p className="text-slate-500 text-sm mt-1">
-          Enter a stock ticker to get a full AI-powered investment analysis
+          支持 A股（沪市6开头，深市0/3开头）、港股、比特币 · AI 自动完成行业、财务、估值、风险研究
         </p>
       </div>
 
@@ -32,7 +32,7 @@ export function TickerInput() {
             type="text"
             value={ticker}
             onChange={e => setTicker(e.target.value.toUpperCase())}
-            placeholder="输入股票代码 e.g. AAPL, MSFT, TSLA"
+            placeholder="输入代码 e.g. 600519, 0700, BTC"
             className="input flex-1 text-lg h-14 px-5 font-mono tracking-wider"
             maxLength={10}
             autoFocus
@@ -66,7 +66,7 @@ export function TickerInput() {
       )}
 
       <div className="mt-4 flex gap-2 flex-wrap">
-        {['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'BRK-B', 'TSLA'].map(t => (
+        {['600519', '000858', '0700', '9988', 'BTC'].map(t => (
           <button
             key={t}
             onClick={() => setTicker(t)}

@@ -11,6 +11,13 @@ interface WatchlistItem {
   notes?: string
 }
 
+function getCurrencySymbol(ticker: string): string {
+  if (ticker === 'BTC-USD') return '$'
+  if (ticker.endsWith('.HK')) return 'HK$'
+  if (ticker.endsWith('.SS') || ticker.endsWith('.SZ')) return '¥'
+  return '$'
+}
+
 export function WatchlistPage() {
   const [items, setItems] = useState<WatchlistItem[]>([])
   const [newTicker, setNewTicker] = useState('')
@@ -51,7 +58,7 @@ export function WatchlistPage() {
             type="text"
             value={newTicker}
             onChange={e => setNewTicker(e.target.value.toUpperCase())}
-            placeholder="添加股票代码 e.g. NVDA"
+            placeholder="添加代码 e.g. 600519, 0700, BTC"
             className="input flex-1 font-mono"
             maxLength={10}
             onKeyDown={e => e.key === 'Enter' && add()}
@@ -82,7 +89,7 @@ export function WatchlistPage() {
                     {item.ticker}
                   </button>
                   {item.current_price && (
-                    <span className="text-slate-300">${item.current_price.toFixed(2)}</span>
+                    <span className="text-slate-300">{getCurrencySymbol(item.ticker)}{item.current_price.toFixed(2)}</span>
                   )}
                   <span className="text-slate-600 text-xs">{new Date(item.added_at).toLocaleDateString()}</span>
                 </div>

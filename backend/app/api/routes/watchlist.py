@@ -62,7 +62,14 @@ async def add_to_watchlist(
     payload: WatchlistAddRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    ticker = payload.ticker.strip().upper()
+    from app.ingestion.ticker_resolver import resolve_ticker
+    raw = payload.ticker.strip().upper()
+    try:
+        ticker_info = resolve_ticker(raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    ticker = ticker_info["yf_ticker"]
+
     # Check duplicate
     stmt = select(WatchlistItem).where(WatchlistItem.ticker == ticker)
     result = await db.execute(stmt)
@@ -84,11 +91,18 @@ async def add_to_watchlist(
 
 @router.delete("/{ticker}", status_code=204)
 async def remove_from_watchlist(ticker: str, db: AsyncSession = Depends(get_db)):
-    ticker = ticker.upper()
-    stmt = select(WatchlistItem).where(WatchlistItem.ticker == ticker)
+    from app.ingestion.ticker_resolver import resolve_ticker
+    raw = ticker.upper()
+    # Resolve short codes to full yf_ticker format for DB lookup
+    try:
+        ticker_info = resolve_ticker(raw)
+        resolved = ticker_info["yf_ticker"]
+    except Exception:
+        resolved = raw
+    stmt = select(WatchlistItem).where(WatchlistItem.ticker == resolved)
     result = await db.execute(stmt)
     item = result.scalar_one_or_none()
     if not item:
-        raise HTTPException(status_code=404, detail=f"{ticker} not in watchlist")
-    db.delete(item)
+        raise HTTPException(status_code=404, detail=f"{resolved} not in watchlist")
+    await db.delete(item)
     await db.commit()

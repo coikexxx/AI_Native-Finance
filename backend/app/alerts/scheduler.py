@@ -61,6 +61,32 @@ class AlertScheduler:
             replace_existing=True,
         )
 
+        # Asian market price check: weekdays 21:30–03:00 ET (covers A-share 09:30–15:00 CST
+        # and HK 09:30–16:00 HKT trading sessions)
+        self.scheduler.add_job(
+            self._check_watchlist_price_anomalies,
+            trigger=CronTrigger(
+                day_of_week="mon-fri",
+                hour="21-23,0-3",
+                minute="*/5",
+                timezone="America/New_York",
+            ),
+            id="watchlist_price_anomaly_checker_asia",
+            replace_existing=True,
+        )
+
+        # BTC is traded 24/7 — add an additional midday check to ensure continuous coverage
+        self.scheduler.add_job(
+            self._check_watchlist_price_anomalies,
+            trigger=CronTrigger(
+                hour="4-8",
+                minute="*/5",
+                timezone="America/New_York",
+            ),
+            id="watchlist_price_anomaly_checker_btc",
+            replace_existing=True,
+        )
+
         self.scheduler.start()
         self._started = True
         logger.info("Alert scheduler started")

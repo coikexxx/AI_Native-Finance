@@ -13,6 +13,8 @@ interface PriceSnapshot {
   avg_volume: number | null
   volume_ratio: number | null
   last_checked_at: string | null
+  market: string | null
+  currency: string | null
 }
 
 interface NewsItem {
@@ -33,9 +35,16 @@ function fmtPct(v: number | null): string {
   return `${sign}${v.toFixed(2)}%`
 }
 
-function fmtPrice(v: number | null): string {
+function fmtPrice(v: number | null, currency = '$'): string {
   if (v === null) return '—'
-  return `$${v.toFixed(2)}`
+  return `${currency}${v.toFixed(2)}`
+}
+
+function marketBadge(market: string | null) {
+  if (market === 'a_share') return <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/40 text-red-300 font-medium">A股</span>
+  if (market === 'hk') return <span className="text-xs px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-300 font-medium">港股</span>
+  if (market === 'crypto') return <span className="text-xs px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300 font-medium">BTC</span>
+  return null
 }
 
 function fmtVolRatio(v: number | null): string {
@@ -102,18 +111,22 @@ function sigBadge(sig: 'high' | 'medium' | 'low') {
 
 function PriceCard({ snap }: { snap: PriceSnapshot }) {
   const vi = volIcon(snap.volume_ratio)
+  const currency = snap.currency || '$'
   return (
     <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 flex flex-col gap-2 hover:border-slate-600 transition-colors">
       <div className="flex items-center justify-between">
-        <button
-          onClick={() => {
-            sessionStorage.setItem('prefill_ticker', snap.ticker)
-            window.location.href = '/'
-          }}
-          className="font-mono font-bold text-sky-400 text-lg hover:text-sky-300 bg-transparent border-0 p-0 cursor-pointer"
-        >
-          {snap.ticker}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              sessionStorage.setItem('prefill_ticker', snap.ticker)
+              window.location.href = '/'
+            }}
+            className="font-mono font-bold text-sky-400 text-lg hover:text-sky-300 bg-transparent border-0 p-0 cursor-pointer"
+          >
+            {snap.ticker}
+          </button>
+          {marketBadge(snap.market)}
+        </div>
         <span className="text-xs text-slate-600">
           {vi && <span className="mr-1">{vi}</span>}
           {snap.last_checked_at
@@ -123,7 +136,7 @@ function PriceCard({ snap }: { snap: PriceSnapshot }) {
       </div>
 
       <div className="flex items-baseline gap-3">
-        <span className="text-2xl font-mono text-slate-100">{fmtPrice(snap.price)}</span>
+        <span className="text-2xl font-mono text-slate-100">{fmtPrice(snap.price, currency)}</span>
         <span className={`text-sm font-mono ${pctClass(snap.change_pct)}`}>
           {pctIcon(snap.change_pct)} {fmtPct(snap.change_pct)}
         </span>
@@ -132,7 +145,7 @@ function PriceCard({ snap }: { snap: PriceSnapshot }) {
       <div className="grid grid-cols-2 gap-x-4 text-xs text-slate-500 mt-1">
         <div>
           <span className="text-slate-600">前收盘</span>
-          <span className="ml-1 text-slate-400">{fmtPrice(snap.prev_close)}</span>
+          <span className="ml-1 text-slate-400">{fmtPrice(snap.prev_close, currency)}</span>
         </div>
         <div>
           <span className="text-slate-600">成交量</span>
@@ -374,7 +387,7 @@ export function MonitorPage() {
                 <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <div>
                   <div className="text-slate-300 font-medium">价格异动监控</div>
-                  <div className="text-slate-500 text-xs">触发阈值：±2%（交易日 9:00–16:00 ET 每5分钟）</div>
+                  <div className="text-slate-500 text-xs">触发阈值：±2% · A股 09:30–15:00 CST | 港股 09:30–16:00 HKT | BTC 24/7</div>
                 </div>
               </div>
               <div className="flex items-center gap-3">

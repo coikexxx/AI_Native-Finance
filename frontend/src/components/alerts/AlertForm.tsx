@@ -57,7 +57,7 @@ export function AlertForm({ defaultTicker = '' }: { defaultTicker?: string }) {
             value={ticker}
             onChange={e => setTicker(e.target.value.toUpperCase())}
             className="input font-mono"
-            placeholder="e.g. AAPL"
+            placeholder="e.g. 600519, 0700, BTC"
             required
             maxLength={10}
           />
@@ -83,13 +83,12 @@ export function AlertForm({ defaultTicker = '' }: { defaultTicker?: string }) {
               {type === 'price_above' ? '价格上限 Target Price (above)' : '价格下限 Target Price (below)'}
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
               <input
                 type="number"
                 value={targetPrice}
                 onChange={e => setTargetPrice(e.target.value)}
-                className="input pl-7"
-                placeholder="0.00"
+                className="input"
+                placeholder="目标价格"
                 step="0.01"
                 min="0"
                 required

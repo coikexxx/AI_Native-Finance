@@ -86,7 +86,21 @@ class AgentOrchestrator:
         """Main entry point. Called as a FastAPI background task."""
         from app.models.analysis import AnalysisJob, AnalysisResult
         from app.models.evidence import EvidenceItem
+        from app.ingestion.ticker_resolver import resolve_ticker
         from sqlalchemy import select
+
+        # ── Resolve ticker to yfinance format and detect market ───────────────
+        try:
+            ticker_info = resolve_ticker(ticker)
+        except ValueError:
+            ticker_info = {
+                "yf_ticker": ticker, "display": ticker, "market": "unknown",
+                "currency": "$", "currency_code": "USD",
+                "exchange": "Unknown", "trading_hours": "Unknown",
+                "market_name_cn": "未知市场",
+            }
+        yf_ticker = ticker_info["yf_ticker"]
+        market = ticker_info["market"]
 
         citations = CitationMapper()
         progress_cb = await self._make_progress_callback(job_id)
@@ -94,16 +108,29 @@ class AgentOrchestrator:
         try:
             # Update job status to running
             await self._update_job_status(db_session, job_id, "running")
-            await self._emit(job_id, "phase_start", payload={"phase": "ingestion", "message": "Starting data collection..."})
+            await self._emit(job_id, "phase_start", payload={
+                "phase": "ingestion",
+                "message": f"开始采集数据 [{ticker_info['market_name_cn']}] {yf_ticker}...",
+            })
 
             # ── Phase 1: Parallel Data Ingestion ──────────────────────────────
-            logger.info(f"[{ticker}] Phase 1: Data Ingestion")
-            context = await self._phase1_ingest(ticker, job_id)
+            logger.info(f"[{yf_ticker}] Phase 1: Data Ingestion (market={market})")
+            context = await self._phase1_ingest(yf_ticker, job_id, market=market)
+            # Embed market metadata into context for all downstream agents
+            context.update({
+                "yf_ticker": yf_ticker,
+                "display_ticker": ticker_info["display"],
+                "market": market,
+                "currency": ticker_info["currency"],
+                "currency_code": ticker_info["currency_code"],
+                "market_name_cn": ticker_info["market_name_cn"],
+                "exchange": ticker_info["exchange"],
+            })
 
             # ── Phase 2: Index & Feature Extraction ───────────────────────────
-            logger.info(f"[{ticker}] Phase 2: Index & Feature Extraction")
-            await self._emit(job_id, "phase_start", payload={"phase": "indexing", "message": "Indexing data..."})
-            context = await self._phase2_index(ticker, context)
+            logger.info(f"[{yf_ticker}] Phase 2: Index & Feature Extraction")
+            await self._emit(job_id, "phase_start", payload={"phase": "indexing", "message": "索引数据..."})
+            context = await self._phase2_index(yf_ticker, context)
 
             # ── Phase 3: Agent Waves ───────────────────────────────────────────
             logger.info(f"[{ticker}] Phase 3: Agent Waves")
@@ -178,7 +205,7 @@ class AgentOrchestrator:
                 pass
             await self._emit(job_id, "error", payload={"message": str(e)})
 
-    async def _phase1_ingest(self, ticker: str, job_id: str) -> dict:
+    async def _phase1_ingest(self, ticker: str, job_id: str, market: str = "unknown") -> dict:
         """Parallel data ingestion from all sources."""
         context = {"ticker": ticker}
 
@@ -237,7 +264,7 @@ class AgentOrchestrator:
 
         async def fetch_news():
             try:
-                text = await asyncio.to_thread(self.news.to_text_summary, ticker, 15)
+                text = await asyncio.to_thread(self.news.to_text_summary, ticker, 15, market)
                 self.object_store.save(ticker, "news", text)
                 return text
             except Exception as e:
@@ -246,7 +273,7 @@ class AgentOrchestrator:
 
         async def fetch_earnings():
             try:
-                text = await asyncio.to_thread(self.earnings.to_text_summary, ticker)
+                text = await asyncio.to_thread(self.earnings.to_text_summary, ticker, market)
                 self.object_store.save(ticker, "earnings", text)
                 return text
             except Exception as e:
@@ -255,7 +282,7 @@ class AgentOrchestrator:
 
         async def fetch_macro():
             try:
-                text = await asyncio.to_thread(self.macro.to_text_summary)
+                text = await asyncio.to_thread(self.macro.to_text_summary, market)
                 return text
             except Exception as e:
                 logger.warning(f"macro failed: {e}")
