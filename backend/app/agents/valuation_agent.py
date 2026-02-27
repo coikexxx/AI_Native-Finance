@@ -1,8 +1,12 @@
-"""Valuation agent: DCF, owner earnings, comparable multiples."""
+"""Valuation agent: DCF (stocks) or crypto framework (BTC)."""
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from app.agents.base_agent import BaseAgent
-from app.llm.prompts.valuation import VALUATION_SYSTEM_PROMPT, VALUATION_USER_TEMPLATE
+from app.llm.prompts.valuation import (
+    VALUATION_SYSTEM_PROMPT, VALUATION_USER_TEMPLATE,
+    CRYPTO_VALUATION_SYSTEM_PROMPT, CRYPTO_VALUATION_USER_TEMPLATE,
+)
+from app.llm.prompts.market_context import get_system_snippet
 from app.tools.financial_model import DCFInputs, DCFModel
 from app.tools.monte_carlo import MonteCarloSimulator
 
@@ -34,6 +38,13 @@ class ValuationAgent(BaseAgent):
     async def run(self, context: dict) -> dict:
         ticker = self.ticker
         company_name = context.get("company_name", ticker)
+        market = context.get("market", "unknown")
+        currency = context.get("currency", "$")
+        market_snippet = get_system_snippet(market)
+
+        # ── BTC: skip DCF, use crypto framework ───────────────────────────────
+        if market == "crypto":
+            return await self._run_crypto(context, market_snippet)
 
         await self.emit_progress(20, "Building DCF model...")
 
@@ -77,13 +88,13 @@ class ValuationAgent(BaseAgent):
                 scenarios = mc.run_scenarios(inputs, current_price)
 
                 dcf_context = f"""DCF Model Results:
-- Intrinsic Value: ${dcf_output.intrinsic_value_per_share:.2f}
-- Current Price: ${current_price:.2f}
+- Intrinsic Value: {currency}{dcf_output.intrinsic_value_per_share:.2f}
+- Current Price: {currency}{current_price:.2f}
 - Margin of Safety: {dcf_output.margin_of_safety_pct:.1f}%
 - Assumptions: Growth Y1-5={fcf_growth*100:.1f}%, WACC=9%, Terminal Growth=3%
 
 Scenarios:
-{chr(10).join([f'- {s.scenario_name}: ${s.intrinsic_value:.2f} ({s.return_pct:+.1f}%)' for s in scenarios])}"""
+{chr(10).join([f'- {s.scenario_name}: {currency}{s.intrinsic_value:.2f} ({s.return_pct:+.1f}%)' for s in scenarios])}"""
 
                 scenario_outputs = [
                     {"scenario_name": s.scenario_name, "probability_pct": s.probability_pct,
@@ -104,8 +115,8 @@ Scenarios:
         await self.emit_progress(60, "Running valuation assessment with AI...")
 
         market_context = f"""
-Current Price: ${current_price:.2f}
-Market Cap: ${company_info.get('marketCap', 0):,.0f}
+Current Price: {currency}{current_price:.2f}
+Market Cap: {currency}{company_info.get('marketCap', 0):,.0f}
 P/E (trailing): {company_info.get('trailingPE', 'N/A')}
 P/E (forward): {company_info.get('forwardPE', 'N/A')}
 EV/EBITDA: {company_info.get('enterpriseToEbitda', 'N/A')}
@@ -115,7 +126,7 @@ P/B: {company_info.get('priceToBook', 'N/A')}
         user_prompt = VALUATION_USER_TEMPLATE.format(
             ticker=ticker,
             company_name=company_name,
-            current_price=f"${current_price:.2f}" if current_price else "N/A",
+            current_price=f"{currency}{current_price:.2f}" if current_price else "N/A",
             features_context="\n".join([f"- {k}: {v}" for k, v in features.items() if v is not None])[:1500],
             financials_context=context.get("financials_text", "")[:2000],
             moat_context=str(context.get("moat_score", {}))[:1000],
@@ -123,8 +134,9 @@ P/B: {company_info.get('priceToBook', 'N/A')}
             market_context=market_context,
         )
 
+        system_prompt = market_snippet + "\n\n" + VALUATION_SYSTEM_PROMPT if market_snippet else VALUATION_SYSTEM_PROMPT
         result = await self.call_llm(
-            system_prompt=VALUATION_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             output_schema=ValuationOutput,
         )
@@ -135,4 +147,44 @@ P/B: {company_info.get('priceToBook', 'N/A')}
             output["dcf_sensitivity_table"] = dcf_output.sensitivity_table
 
         await self.emit_progress(90, "Valuation analysis complete")
+        return output
+
+    async def _run_crypto(self, context: dict, market_snippet: str) -> dict:
+        """BTC-specific valuation using crypto frameworks instead of DCF."""
+        ticker = self.ticker
+        price_features = context.get("price_features", {})
+        company_info = context.get("company_info", {})
+        current_price = price_features.get("current_price") or context.get("current_price", 0)
+
+        await self.emit_progress(30, "Running crypto valuation framework...")
+
+        market_cap = company_info.get("marketCap", 0)
+        volume = company_info.get("volume24Hr") or company_info.get("regularMarketVolume", 0)
+
+        crypto_context = f"""BTC市场数据:
+- 当前价格: ${current_price:,.2f} USD
+- 市值: ${market_cap:,.0f} USD
+- 24小时交易量: ${volume:,.0f} USD
+{context.get('financials_text', '')}
+
+链上/市场指标（如可用）:
+{context.get('company_text', '')[:1000]}"""
+
+        system_prompt = market_snippet + "\n\n" + CRYPTO_VALUATION_SYSTEM_PROMPT
+        user_prompt = CRYPTO_VALUATION_USER_TEMPLATE.format(
+            ticker=ticker,
+            current_price=f"${current_price:,.2f}",
+            crypto_context=crypto_context,
+            news_context=context.get("news_text", "")[:1500],
+            macro_context=context.get("macro_text", "")[:800],
+        )
+
+        result = await self.call_llm(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            output_schema=ValuationOutput,
+        )
+        output = result.model_dump()
+        output["scenario_outputs"] = []
+        await self.emit_progress(90, "Crypto valuation analysis complete")
         return output

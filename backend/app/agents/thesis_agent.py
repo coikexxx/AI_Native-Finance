@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import List, Literal
 from app.agents.base_agent import BaseAgent
 from app.llm.prompts.thesis import THESIS_SYSTEM_PROMPT, THESIS_USER_TEMPLATE
+from app.llm.prompts.market_context import get_system_snippet
 
 
 class KeyVariable(BaseModel):
@@ -31,6 +32,8 @@ class ThesisAgent(BaseAgent):
     async def run(self, context: dict) -> dict:
         ticker = self.ticker
         company_name = context.get("company_name", ticker)
+        market = context.get("market", "unknown")
+        market_snippet = get_system_snippet(market)
 
         await self.emit_progress(20, "Synthesizing all research...")
 
@@ -65,8 +68,9 @@ class ThesisAgent(BaseAgent):
 
         await self.emit_progress(50, "Generating investment memo with AI...")
 
+        system_prompt = market_snippet + "\n\n" + THESIS_SYSTEM_PROMPT if market_snippet else THESIS_SYSTEM_PROMPT
         result = await self.call_llm(
-            system_prompt=THESIS_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             output_schema=ThesisOutput,
             max_tokens=8192,

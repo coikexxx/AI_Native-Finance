@@ -28,6 +28,8 @@ class PriceSnapshot(BaseModel):
     avg_volume: Optional[int] = None
     volume_ratio: Optional[float] = None
     last_checked_at: Optional[datetime] = None
+    market: Optional[str] = None
+    currency: Optional[str] = None
 
 
 class NewsItem(BaseModel):
@@ -79,6 +81,14 @@ async def get_watchlist_prices(db: AsyncSession = Depends(get_db)):
     from app.ingestion.market_data import market_data_fetcher
 
     async def fetch(item: WatchlistItem) -> PriceSnapshot:
+        from app.ingestion.ticker_resolver import resolve_ticker
+        try:
+            ticker_info = resolve_ticker(item.ticker)
+            market = ticker_info["market"]
+            currency = ticker_info["currency"]
+        except Exception:
+            market = "unknown"
+            currency = "$"
         try:
             detail = await asyncio.to_thread(
                 market_data_fetcher.fetch_price_detail, item.ticker
@@ -92,9 +102,11 @@ async def get_watchlist_prices(db: AsyncSession = Depends(get_db)):
                 avg_volume=detail.get("avg_volume"),
                 volume_ratio=detail.get("volume_ratio"),
                 last_checked_at=item.last_price_checked_at,
+                market=market,
+                currency=currency,
             )
         except Exception:
-            return PriceSnapshot(ticker=item.ticker)
+            return PriceSnapshot(ticker=item.ticker, market=market, currency=currency)
 
     snapshots = await asyncio.gather(*[fetch(item) for item in items])
     return list(snapshots)
