@@ -35,6 +35,9 @@ export interface AnalysisJob {
   investment_memo_md?: string
   evidence_items?: EvidenceReference[]
   scenario_outputs?: ScenarioResult[]
+  model_used?: string
+  input_tokens?: number
+  output_tokens?: number
 }
 
 export interface AgentStatus {

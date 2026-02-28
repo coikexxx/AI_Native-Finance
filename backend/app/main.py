@@ -11,6 +11,7 @@ from app.api.routes.analysis import router as analysis_router
 from app.api.routes.alerts import router as alerts_router
 from app.api.routes.watchlist import router as watchlist_router
 from app.api.routes.monitor import router as monitor_router
+from app.api.routes.settings import router as settings_router
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -62,6 +63,7 @@ app.include_router(analysis_router)
 app.include_router(alerts_router)
 app.include_router(watchlist_router)
 app.include_router(monitor_router)
+app.include_router(settings_router)
 
 
 @app.get("/")

@@ -1,4 +1,4 @@
-from sqlalchemy import String, DateTime, JSON, ForeignKey, Text
+from sqlalchemy import String, DateTime, JSON, ForeignKey, Text, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 from typing import Optional, List
@@ -20,6 +20,9 @@ class AnalysisJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    model_used: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     result: Mapped[Optional["AnalysisResult"]] = relationship(
         "AnalysisResult", back_populates="job", uselist=False, lazy="selectin"

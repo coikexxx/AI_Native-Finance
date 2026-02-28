@@ -58,6 +58,16 @@ export function HomePage() {
                 <div className="text-xs text-slate-600 mt-1">
                   {new Date(job.created_at).toLocaleString()}
                 </div>
+                {(job.model_used || job.input_tokens || job.output_tokens) && (
+                  <div className="flex gap-2 text-xs text-slate-700 mt-0.5">
+                    {job.model_used && (
+                      <span>{job.model_used.replace('claude-', '')}</span>
+                    )}
+                    {((job.input_tokens ?? 0) + (job.output_tokens ?? 0)) > 0 && (
+                      <span>{(((job.input_tokens ?? 0) + (job.output_tokens ?? 0)) / 1000).toFixed(1)}K tokens</span>
+                    )}
+                  </div>
+                )}
               </Link>
             ))}
           </div>

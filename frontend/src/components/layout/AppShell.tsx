@@ -6,6 +6,7 @@ const navItems = [
   { path: '/alerts', label: '提醒 Alerts', icon: '🔔' },
   { path: '/watchlist', label: '自选股 Watchlist', icon: '⭐' },
   { path: '/monitor', label: '监控 Monitor', icon: '📡' },
+  { path: '/settings', label: '设置 Settings', icon: '⚙️' },
 ]
 
 export function AppShell() {

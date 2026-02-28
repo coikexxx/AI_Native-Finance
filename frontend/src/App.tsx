@@ -5,6 +5,7 @@ import { AnalysisPage } from './pages/AnalysisPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { WatchlistPage } from './pages/WatchlistPage'
 import { MonitorPage } from './pages/MonitorPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { NotificationToast } from './components/ui/NotificationToast'
 import { useSSE } from './hooks/useSSE'
 import { useAnalysisStore } from './store/analysisStore'
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/monitor" element={<MonitorPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
       <NotificationToast />
