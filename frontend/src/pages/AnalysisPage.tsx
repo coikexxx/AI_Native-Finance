@@ -126,6 +126,17 @@ export function AnalysisPage() {
              isFailed ? '分析失败 Analysis Failed' :
              '分析进行中 Analysis in Progress...'}
           </p>
+          {isComplete && (currentJob.model_used || (currentJob.input_tokens ?? 0) > 0) && (
+            <div className="flex gap-4 text-xs text-slate-600 mt-1">
+              {currentJob.model_used && <span>模型: {currentJob.model_used}</span>}
+              {(currentJob.input_tokens ?? 0) > 0 && (
+                <span>输入 {(currentJob.input_tokens ?? 0).toLocaleString()} tokens</span>
+              )}
+              {(currentJob.output_tokens ?? 0) > 0 && (
+                <span>输出 {(currentJob.output_tokens ?? 0).toLocaleString()} tokens</span>
+              )}
+            </div>
+          )}
         </div>
         {isComplete && (
           <button

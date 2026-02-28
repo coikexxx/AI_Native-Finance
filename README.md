@@ -31,6 +31,11 @@ AI Native Finance 是一个专注于 **A股 / 港股 / BTC** 的 AI 投研平台
 - A股/港股 亚洲市场时段覆盖（北京时间 9:30–16:00）+ BTC 24/7
 - 通过 SSE 实时推送价格异动和新闻预警
 
+### 模型配置与 Token 追踪
+- 前端 `/settings` 页面可配置模型（Sonnet / Opus / Haiku）和 API 密钥，无需改代码
+- 每次分析任务记录所用模型名称和 Token 消耗（输入/输出）
+- 历史分析卡片和分析详情页均展示 Token 消耗量
+
 ### 预警与自选股
 - 价格突破预警（高于/低于目标价）
 - 定期重新分析（日/周/月）
@@ -44,7 +49,7 @@ AI Native Finance 是一个专注于 **A股 / 港股 / BTC** 的 AI 投研平台
 AI_Native-Finance/
 ├── backend/
 │   └── app/
-│       ├── api/routes/          # analysis / alerts / watchlist / monitor 路由
+│       ├── api/routes/          # analysis / alerts / watchlist / monitor / settings 路由
 │       ├── core/                # 编排器、SSE 管理
 │       ├── agents/              # 9个研究 Agent（行业/财务/估值/风险/论文等）
 │       ├── alerts/              # 预警调度器、自选股监控
@@ -53,16 +58,27 @@ AI_Native-Finance/
 │       │   ├── news.py              # 新浪财经中文新闻 + Yahoo RSS
 │       │   ├── macro.py             # 宏观数据（A股含 USD/CNY，BTC 含 VIX）
 │       │   └── earnings_calls.py    # 财报披露（CNINFO/HKEX，非 EDGAR）
-│       ├── llm/prompts/
-│       │   ├── market_context.py    # A股/港股/加密货币市场背景提示词
-│       │   └── valuation.py         # 含 BTC 专用估值提示词
+│       ├── llm/
+│       │   ├── client.py            # Anthropic 客户端（ContextVar token 追踪）
+│       │   └── prompts/
+│       │       ├── market_context.py    # A股/港股/加密货币市场背景提示词
+│       │       └── valuation.py         # 含 BTC 专用估值提示词
+│       ├── models/
+│       │   └── settings.py          # AppSettings DB 模型（单例行 id=1）
+│       ├── services/
+│       │   └── settings_service.py  # get_effective_settings / save_settings
 │       ├── governance/          # 提示词合规与 ticker 校验
 │       └── main.py
 └── frontend/
     └── src/
         ├── pages/
+        │   ├── SettingsPage.tsx     # 模型配置页（模型/API密钥/Token上限）
         │   ├── MonitorPage.tsx      # 行情监控看板
         │   └── WatchlistPage.tsx    # 自选股管理
+        ├── store/
+        │   └── settingsStore.ts     # Zustand 设置状态管理
+        ├── api/settings.ts          # 设置 API 调用封装
+        ├── types/settings.ts        # 设置类型定义 + AVAILABLE_MODELS
         └── components/
             └── research/TickerInput.tsx
 ```
@@ -103,7 +119,7 @@ frontend_url=http://localhost:5173
 EOF
 ```
 
-> 若不配置 `anthropic_api_key`，与 LLM 相关分析能力会受限。
+> `anthropic_api_key` 在 `.env` 中配置作为默认值；也可在前端 `/settings` 页面运行时覆盖，优先级更高。
 
 ### 4.3 启动服务
 
@@ -227,9 +243,38 @@ curl -X DELETE http://localhost:8000/api/v1/watchlist/600519.SS
 | GET | `/api/v1/monitor/news` | 自选股新闻/舆情聚合 |
 | POST | `/api/v1/monitor/check-now` | 手动触发一次异动检测 |
 
+### 设置
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/settings` | 读取当前模型配置（不返回 API 密钥原文）|
+| PUT | `/api/v1/settings` | 保存模型/密钥/Token 上限配置 |
+| POST | `/api/v1/settings/test-connection` | 验证 API 凭证连通性 |
+
 ---
 
-## 8. 监控调度说明
+## 8. 模型配置与 Token 追踪
+
+### 8.1 前端配置页
+
+访问前端 `http://localhost:5173/settings`（导航栏 ⚙️ 设置）：
+
+| 设置项 | 说明 |
+|--------|------|
+| 模型选择 | Claude Sonnet 4.6（推荐）/ Opus 4.6（最强）/ Haiku 4.5（最快）|
+| API Key | 可在 UI 设置运行时覆盖密钥，优先级高于 `.env`；密钥仅存于本地 SQLite，接口不返回原文 |
+| 最大 Token 数 | 每次 LLM 调用的 Token 上限（建议 8192，支持 1024–32768）|
+| 测试连接 | 发起一次最小 API 调用验证凭证是否有效 |
+
+### 8.2 Token 消耗追踪
+
+- 每次分析任务完成后，后端自动记录所用模型名称和累计 Token 数（输入 + 输出）
+- **历史分析列表**：每张卡片下方显示模型简称和总 Token 数（如 `sonnet-4-6 · 23.5K tokens`）
+- **分析详情页**：标题区域显示完整模型名称、输入/输出 Token 明细
+- API 返回字段：`model_used`、`input_tokens`、`output_tokens`
+
+---
+
+## 10. 监控调度说明
 
 行情监控通过 APScheduler 定时运行，覆盖三个市场：
 
@@ -244,19 +289,20 @@ curl -X DELETE http://localhost:8000/api/v1/watchlist/600519.SS
 
 ---
 
-## 9. 常见问题排查
+## 11. 常见问题排查
 
-### 9.1 前端无法请求后端
+### 11.1 前端无法请求后端
 1. 确认后端在 `:8000` 正常启动。
 2. 确认前端是通过 `npm run dev` 启动（带代理）。
 3. 检查浏览器控制台与后端日志。
 
-### 9.2 无法生成分析结果
-1. 检查 `anthropic_api_key` 是否正确配置。
-2. 检查外网访问能力（yfinance 行情 / 新浪财经 / LLM API）。
-3. 查看后端日志中对应 job_id 的报错。
+### 11.2 无法生成分析结果
+1. 检查 `anthropic_api_key` 是否正确配置（`.env` 或前端 `/settings` 页面）。
+2. 在前端 `/settings` 页面点击"测试连接"确认 API 凭证有效。
+3. 检查外网访问能力（yfinance 行情 / 新浪财经 / LLM API）。
+4. 查看后端日志中对应 job_id 的报错。
 
-### 9.3 输入股票代码报错 400
+### 11.3 输入股票代码报错 400
 目前仅支持 **A股（沪深）、港股、BTC**，输入其他市场代码（如 `AAPL`）会返回 400。
 支持的短代码格式：
 - A股沪市：`600519`、`601318`（6 位，6 开头）
@@ -264,13 +310,13 @@ curl -X DELETE http://localhost:8000/api/v1/watchlist/600519.SS
 - 港股：`0700`、`9988`（2–5 位，自动补零）
 - BTC：`BTC`、`btc`、`bitcoin`
 
-### 9.4 SSE 中断
+### 11.4 SSE 中断
 1. 确认请求没有被反向代理缓冲（Nginx 需关闭 buffering）。
 2. 长连接场景可关注心跳包是否正常返回。
 
 ---
 
-## 10. 生产部署建议
+## 12. 生产部署建议
 
 - 后端使用 `uvicorn/gunicorn` + 进程管理（systemd/supervisor）。
 - 前端静态资源由 Nginx 托管，注意关闭 SSE 的响应缓冲（`proxy_buffering off`）。

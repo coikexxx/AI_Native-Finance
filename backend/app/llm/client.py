@@ -1,8 +1,10 @@
-"""Anthropic Claude API client with retry logic."""
+"""Anthropic Claude API client with retry logic and per-job token tracking."""
 import anthropic
 import asyncio
 import json
 import re
+from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Type, TypeVar
 from pydantic import BaseModel
 from app.config import settings
@@ -12,17 +14,51 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
+# ─── Per-job context vars (set by orchestrator before each analysis) ──────────
+# ContextVar is per-asyncio-Task, so concurrent jobs don't interfere.
+_ctx_job_id: ContextVar[str | None] = ContextVar('ctx_job_id', default=None)
+_ctx_model: ContextVar[str | None] = ContextVar('ctx_model', default=None)
+_ctx_api_key: ContextVar[str | None] = ContextVar('ctx_api_key', default=None)
+_ctx_max_tokens: ContextVar[int | None] = ContextVar('ctx_max_tokens', default=None)
 
+
+def set_job_context(job_id: str, model: str, api_key: str, max_tokens: int) -> None:
+    """Called by the orchestrator at the start of each analysis job."""
+    _ctx_job_id.set(job_id)
+    _ctx_model.set(model)
+    _ctx_api_key.set(api_key)
+    _ctx_max_tokens.set(max_tokens)
+
+
+# ─── Token accumulator ────────────────────────────────────────────────────────
+@dataclass
+class UsageAccumulator:
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
+# ─── Client ───────────────────────────────────────────────────────────────────
 class AnthropicClient:
     def __init__(self):
-        self._client: anthropic.AsyncAnthropic | None = None
+        self._usage: dict[str, UsageAccumulator] = {}
 
-    def _get_client(self) -> anthropic.AsyncAnthropic:
-        if self._client is None:
-            self._client = anthropic.AsyncAnthropic(
-                api_key=settings.anthropic_api_key,
-            )
-        return self._client
+    # Token accumulator API
+    def register_job(self, job_id: str) -> None:
+        """Register a job for token tracking before running agents."""
+        self._usage[job_id] = UsageAccumulator()
+
+    def get_usage(self, job_id: str) -> UsageAccumulator:
+        """Return accumulated token counts for a job."""
+        return self._usage.get(job_id, UsageAccumulator())
+
+    def clear_job(self, job_id: str) -> None:
+        """Release memory after usage has been persisted."""
+        self._usage.pop(job_id, None)
+
+    def _make_client(self) -> anthropic.AsyncAnthropic:
+        """Create a fresh Anthropic client using current job context (or env fallback)."""
+        api_key = _ctx_api_key.get() or settings.anthropic_api_key
+        return anthropic.AsyncAnthropic(api_key=api_key)
 
     async def complete(
         self,
@@ -32,18 +68,27 @@ class AnthropicClient:
         max_retries: int = 3,
     ) -> str:
         """Send a completion request and return the text response."""
-        client = self._get_client()
-        max_tokens = max_tokens or settings.llm_max_tokens
+        effective_model = _ctx_model.get() or settings.llm_model
+        effective_max_tokens = max_tokens or _ctx_max_tokens.get() or settings.llm_max_tokens
+        job_id = _ctx_job_id.get()
 
         for attempt in range(max_retries):
             try:
+                client = self._make_client()
                 message = await client.messages.create(
-                    model=settings.llm_model,
-                    max_tokens=max_tokens,
+                    model=effective_model,
+                    max_tokens=effective_max_tokens,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_prompt}],
                 )
+
+                # Accumulate token usage for the current job
+                if job_id and job_id in self._usage:
+                    self._usage[job_id].input_tokens += message.usage.input_tokens
+                    self._usage[job_id].output_tokens += message.usage.output_tokens
+
                 return message.content[0].text
+
             except anthropic.RateLimitError:
                 wait = 2 ** attempt
                 logger.warning(f"Rate limit hit, waiting {wait}s (attempt {attempt + 1})")
@@ -82,17 +127,14 @@ Wrap your JSON response in <json> tags:
 
 def parse_structured_output(text: str, schema: Type[T]) -> T:
     """Extract JSON from <json> tags and parse into Pydantic model."""
-    # Try <json> tags first
     match = re.search(r"<json>(.*?)</json>", text, re.DOTALL)
     if match:
         json_str = match.group(1).strip()
     else:
-        # Try to find raw JSON block
         match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
         if match:
             json_str = match.group(1)
         else:
-            # Last resort: find first { to last }
             start = text.find("{")
             end = text.rfind("}")
             if start == -1 or end == -1:

@@ -75,6 +75,9 @@ class AnalysisJobResponse(BaseModel):
     created_at: datetime
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
+    model_used: Optional[str] = None
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 class AnalysisResultResponse(BaseModel):
@@ -90,3 +93,6 @@ class AnalysisResultResponse(BaseModel):
     dcf_assumptions: Optional[DCFAssumptions] = None
     scenario_outputs: Optional[List[ScenarioResult]] = None
     evidence_items: Optional[List[EvidenceReference]] = None
+    model_used: Optional[str] = None
+    input_tokens: int = 0
+    output_tokens: int = 0

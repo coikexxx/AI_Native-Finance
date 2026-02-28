@@ -79,6 +79,9 @@ async def get_analysis_history(
             created_at=j.created_at,
             completed_at=j.completed_at,
             error_message=j.error_message,
+            model_used=j.model_used,
+            input_tokens=j.input_tokens or 0,
+            output_tokens=j.output_tokens or 0,
         )
         for j in jobs
     ]
@@ -200,4 +203,7 @@ async def get_analysis(job_id: str, db: AsyncSession = Depends(get_db)):
         decision_rationale=res.decision_rationale,
         investment_memo_md=res.investment_memo_md,
         evidence_items=evidence_refs,
+        model_used=job.model_used,
+        input_tokens=job.input_tokens or 0,
+        output_tokens=job.output_tokens or 0,
     )

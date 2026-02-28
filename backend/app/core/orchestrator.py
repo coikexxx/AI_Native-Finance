@@ -87,7 +87,14 @@ class AgentOrchestrator:
         from app.models.analysis import AnalysisJob, AnalysisResult
         from app.models.evidence import EvidenceItem
         from app.ingestion.ticker_resolver import resolve_ticker
+        from app.llm.client import llm_client, set_job_context
+        from app.services.settings_service import get_effective_settings
         from sqlalchemy import select
+
+        # ── Resolve effective model settings (DB override > env fallback) ─────
+        effective = await get_effective_settings(db_session)
+        llm_client.register_job(job_id)
+        set_job_context(job_id, effective.model_name, effective.api_key, effective.max_tokens)
 
         # ── Resolve ticker to yfinance format and detect market ───────────────
         try:
@@ -185,6 +192,17 @@ class AgentOrchestrator:
                 )
                 db_session.add(ev)
 
+            # Persist token usage and model info
+            usage = llm_client.get_usage(job_id)
+            job_result = await db_session.execute(
+                select(AnalysisJob).where(AnalysisJob.id == job_id)
+            )
+            job_row = job_result.scalar_one_or_none()
+            if job_row:
+                job_row.model_used = effective.model_name
+                job_row.input_tokens = usage.input_tokens
+                job_row.output_tokens = usage.output_tokens
+
             await self._update_job_status(db_session, job_id, "complete")
             await db_session.commit()
 
@@ -193,8 +211,15 @@ class AgentOrchestrator:
                 "scorecard": scorecard,
                 "decision_rationale": thesis.get("decision_rationale", ""),
                 "memo_length": len(full_memo),
+                "model_used": effective.model_name,
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
             })
-            logger.info(f"[{ticker}] Analysis complete. Decision: {decision}")
+            logger.info(
+                f"[{ticker}] Analysis complete. Decision: {decision} | "
+                f"Model: {effective.model_name} | "
+                f"Tokens: {usage.input_tokens}in/{usage.output_tokens}out"
+            )
 
         except Exception as e:
             logger.error(f"[{ticker}] Analysis failed: {e}", exc_info=True)
@@ -204,6 +229,8 @@ class AgentOrchestrator:
             except Exception:
                 pass
             await self._emit(job_id, "error", payload={"message": str(e)})
+        finally:
+            llm_client.clear_job(job_id)
 
     async def _phase1_ingest(self, ticker: str, job_id: str, market: str = "unknown") -> dict:
         """Parallel data ingestion from all sources."""
