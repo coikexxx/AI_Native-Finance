@@ -64,7 +64,7 @@ export function AlertList() {
                       await alertsApi.delete(alert.id)
                       remove(alert.id)
                     } catch {
-                      alert('删除失败 Failed to delete alert. Please try again.')
+                      window.alert('删除失败 Failed to delete alert. Please try again.')
                     }
                   }}
                   className="text-slate-600 hover:text-red-400 ml-1 p-0.5 transition-colors"
